@@ -1,0 +1,130 @@
+
+- name: Установка и настройка ПО
+  hosts: all
+  become: true
+  vars:
+    postgresql_package_name: "postgresql-{{ postgresql_version | default('14') }}"
+    docker_package_name: docker.io
+
+  tasks:
+
+    - name: Отключить все mirrorlist во всех .repo файлах (CentOS)
+      replace:
+        path: "{{ item }}"
+        regexp: '^mirrorlist=.*$'
+        replace: '# mirrorlist отключён Ansible'
+      with_fileglob:
+        - /etc/yum.repos.d/*.repo
+      when: ansible_os_family == "RedHat" and "'app' in group_names"
+
+    - name: Убедиться, что baseurl есть в AppStream
+      lineinfile:
+        path: /etc/yum.repos.d/CentOS-Stream-AppStream.repo
+        regexp: '^#?baseurl='
+        line: "baseurl=http://vault.centos.org/8-stream/AppStream/x86_64/os/"
+        insertafter: '^\[.*\]'
+        state: present
+      when: ansible_os_family == "RedHat" and "'app' in group_names"
+
+    - name: Убедиться, что baseurl есть в BaseOS
+      lineinfile:
+        path: /etc/yum.repos.d/CentOS-Stream-BaseOS.repo
+        regexp: '^#?baseurl='
+        line: "baseurl=http://vault.centos.org/8-stream/BaseOS/x86_64/os/"
+        insertafter: '^\[.*\]'
+        state: present
+      when: ansible_os_family == "RedHat" and "'app' in group_names"
+
+    - name: Убедиться, что baseurl есть в Extras
+      lineinfile:
+        path: /etc/yum.repos.d/CentOS-Stream-Extras.repo
+        regexp: '^#?baseurl='
+        line: "baseurl=http://vault.centos.org/8-stream/extras/x86_64/os/"
+        insertafter: '^\[.*\]'
+        state: present
+      when: ansible_os_family == "RedHat" and "'app' in group_names"
+
+    - name: Отключить репозиторий extras-common
+      ini_file:
+        path: /etc/yum.repos.d/CentOS-Stream-Extras.repo
+        section: extras-common
+        option: enabled
+        value: '0'
+      when: ansible_os_family == "RedHat" and "'app' in group_names"
+
+    - name: Обновить только кэш dnf
+      dnf:
+        update_cache: yes
+      when: ansible_os_family == "RedHat" and "'app' in group_names"
+
+    - name: Добавить Docker CE репозиторий (CentOS)
+      yum_repository:
+        name: docker-ce
+        description: Docker CE Stable - $basearch
+        baseurl: https://download.docker.com/linux/centos/8/$basearch/stable
+        enabled: yes
+        gpgcheck: yes
+        gpgkey: https://download.docker.com/linux/centos/gpg
+      when: ansible_os_family == "RedHat" and "'app' in group_names"
+
+    - name: Установить Docker CE (CentOS)
+      package:
+        name: docker-ce
+        state: present
+      when: ansible_os_family == "RedHat" and "'app' in group_names"
+      tags: docker
+
+    - name: apt update (только для database)
+      apt:
+        update_cache: yes
+      when: ansible_os_family == "Debian" and "'database' in group_names"
+
+    - name: Добавить репозиторий PostgreSQL (только для database)
+      apt_repository:
+        repo: "deb http://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+        state: present
+        filename: "pgdg"
+      when: ansible_os_family == "Debian" and "'database' in group_names"
+
+    - name: Добавить ключ репозитория PostgreSQL
+      apt_key:
+        url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+        state: present
+      when: ansible_os_family == "Debian" and "'database' in group_names"
+
+    - name: Установка Docker (только для app, Ubuntu)
+      package:
+        name: "{{ docker_package_name }}"
+        state: present
+      when: ansible_os_family == "Debian" and "'app' in group_names"
+      tags: docker
+
+    - name: Запуск и включение Docker (только для app)
+      service:
+        name: docker
+        state: started
+        enabled: true
+      when: "'app' in group_names"
+      tags: docker
+
+    - name: Установка PostgreSQL (только для database)
+      package:
+        name: "{{ postgresql_package_name }}"
+        state: present
+      when: "'database' in group_names"
+      tags: postgres
+
+    - name: Запуск и включение PostgreSQL (только для database)
+      service:
+        name: postgresql
+        state: started
+        enabled: true
+      when: "'database' in group_names"
+      tags: postgres
+
+    - name: Показать data dir PostgreSQL (опционально)
+      debug:
+        msg: "PostgreSQL data dir: {{ postgresql_data_dir | default('по умолчанию') }}"
+      when: "'database' in group_names"
+      tags: postgres
+
