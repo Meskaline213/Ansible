@@ -16,8 +16,8 @@ terraform {
     bucket     = "skillfactory-bucket"
     region     = "ru-central1"
     key        = "issue1/lb.tfstate"
-    access_key = "YCAJEe2DqUPQ4yEmmaPMaeCxY"
-    secret_key = "YCN19QxzaI4O6WcrDeGOn8qdFIj4p9qk7L-WNgA-"
+    access_key = "se key"
+    secret_key = "se key"
 
     skip_region_validation      = true
     skip_credentials_validation = true
